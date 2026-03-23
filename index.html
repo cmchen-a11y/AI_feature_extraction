@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>影像處理 Pipeline ×3</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06070d;--surf:#0c0e1a;--surf2:#101320;--surf3:#151828;
+  --bdr:#181b32;--bdr2:#20243c;--bdr3:#2a2f52;
+  --ac:#4fffb0;--ac2:#ff4d6a;--ac3:#ffd166;--ac4:#4db8ff;--ac5:#c084fc;
+  --tx:#bcc8ff;--txd:#363c60;--txb:#fff;
+  --sb:180px; --ctrl:210px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace;font-size:12px;overflow:hidden;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:var(--bdr3);border-radius:2px;}
+
+/* ── Header ── */
+header{height:44px;background:rgba(6,7,13,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--bdr2);display:flex;align-items:center;gap:10px;padding:0 16px;z-index:200;position:relative;flex-shrink:0;}
+.logo{font-family:'Syne',sans-serif;font-weight:900;font-size:13px;color:var(--txb);}
+.logo em{color:var(--ac);font-style:normal;}
+.hbadge{font-size:9px;color:var(--txd);border:1px solid var(--bdr2);padding:2px 6px;border-radius:2px;letter-spacing:.1em;}
+.hright{margin-left:auto;display:flex;gap:5px;align-items:center;}
+.hbtn{background:none;border:1px solid var(--bdr2);color:var(--txd);font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 10px;border-radius:2px;cursor:pointer;transition:.14s;letter-spacing:.05em;}
+.hbtn:hover{border-color:var(--ac4);color:var(--ac4);}
+.hbtn:disabled{opacity:.3;cursor:default;pointer-events:none;}
+.hbtn.undo{border-color:var(--ac5);color:var(--ac5);}
+.hbtn.undo:hover{background:rgba(192,132,252,.08);}
+.hbtn.pri{border-color:var(--ac);color:var(--ac);background:rgba(79,255,176,.05);}
+.hbtn.pri:hover{background:rgba(79,255,176,.14);}
+.hundo-cnt{font-size:9px;color:var(--txd);}
+
+/* ── App layout ── */
+.app{display:flex;height:calc(100vh - 44px);overflow:hidden;}
+
+/* ── Sidebar ── */
+.sb{width:var(--sb);flex-shrink:0;border-right:1px solid var(--bdr);background:var(--surf);display:flex;flex-direction:column;overflow-y:auto;}
+.sb-sec{padding:10px 10px 4px;}
+.sb-ttl{font-size:9px;letter-spacing:.14em;color:var(--txd);text-transform:uppercase;margin-bottom:7px;}
+.sb-div{height:1px;background:var(--bdr);margin:8px 0;}
+.step-list{display:flex;flex-direction:column;gap:3px;}
+.stype{width:100%;padding:6px 8px;background:var(--surf2);border:1px solid var(--bdr);color:var(--tx);font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:3px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.14s;text-align:left;}
+.stype:hover{border-color:var(--ac4);color:var(--ac4);background:rgba(77,184,255,.05);}
+.stype .si{width:14px;text-align:center;flex-shrink:0;font-size:11px;}
+.sb-hint{color:var(--txd);font-size:9px;line-height:1.85;}
+.sb-hint span{color:var(--ac);}
+.sb-hint b{color:var(--ac5);}
+
+/* ── Pipeline scroll wrap ── */
+.pipe-wrap{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;}
+
+/* ── Input row (3 upload panels) ── */
+.input-row{display:grid;grid-template-columns:var(--ctrl) 1fr 1fr 1fr;border-bottom:1px solid var(--bdr2);background:var(--surf);}
+.input-label-cell{display:flex;align-items:center;justify-content:center;border-right:1px solid var(--bdr2);padding:10px;}
+.input-tag{font-family:'Syne',sans-serif;font-weight:800;font-size:9px;letter-spacing:.14em;color:var(--ac);text-transform:uppercase;writing-mode:vertical-lr;transform:rotate(180deg);}
+.img-slot{border-right:1px solid var(--bdr2);display:flex;flex-direction:column;}
+.img-slot:last-child{border-right:none;}
+.slot-head{padding:5px 8px;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.01);border-bottom:1px solid var(--bdr);}
+.slot-num{font-size:9px;color:var(--txd);letter-spacing:.08em;}
+.slot-dim{margin-left:auto;font-size:8px;color:var(--txd);}
+.slot-up{flex:1;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;background:#000;overflow:hidden;}
+.slot-up input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+.slot-up canvas{max-width:100%;max-height:160px;display:block;cursor:crosshair;}
+.slot-empty{color:var(--txd);font-size:10px;text-align:center;padding:16px 8px;line-height:1.8;pointer-events:none;}
+.slot-empty .ue{font-size:18px;display:block;margin-bottom:4px;}
+.slot-up:hover .slot-empty{color:var(--ac);}
+.slot-del{position:absolute;top:4px;right:4px;background:rgba(255,77,106,.15);border:1px solid rgba(255,77,106,.3);color:var(--ac2);font-size:10px;padding:1px 6px;border-radius:2px;cursor:pointer;display:none;z-index:10;}
+.slot-up:hover .slot-del{display:block;}
+.slot-del:hover{background:rgba(255,77,106,.3);}
+
+/* ── Step node ── */
+.arrow-row{display:grid;grid-template-columns:var(--ctrl) 1fr 1fr 1fr;}
+.arrow-ctrl{border-right:1px solid var(--bdr2);}
+.arrow-col{display:flex;align-items:center;justify-content:center;height:24px;border-right:1px solid var(--bdr2);}
+.arrow-col:last-child{border-right:none;}
+.arr{width:2px;height:18px;background:linear-gradient(var(--bdr3),var(--ac));position:relative;}
+.arr::after{content:'';position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:var(--ac);}
+
+.pnode{border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);background:var(--surf2);animation:nin .18s ease;transition:border-color .2s;}
+@keyframes nin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.pnode.live{border-color:rgba(79,255,176,.3);}
+.pnode.err{border-top-color:var(--ac2);border-bottom-color:var(--ac2);}
+
+/* Node head – full width */
+.nh{padding:6px 10px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--bdr);cursor:pointer;user-select:none;background:var(--surf);}
+.nh:hover{background:rgba(255,255,255,.01);}
+.ndot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.ntitle{font-family:'Syne',sans-serif;font-weight:800;font-size:9px;letter-spacing:.1em;color:var(--txb);text-transform:uppercase;}
+.nidx{font-size:9px;color:var(--txd);flex-shrink:0;}
+.nacts{margin-left:auto;display:flex;gap:2px;}
+.na{background:none;border:none;color:var(--txd);cursor:pointer;font-size:11px;padding:1px 5px;border-radius:2px;transition:.1s;font-family:'JetBrains Mono',monospace;}
+.na:hover{color:var(--ac2);background:rgba(255,77,106,.08);}
+.na.mv:hover{color:var(--ac4);background:rgba(77,184,255,.08);}
+.chev{font-size:8px;color:var(--txd);transition:.18s;margin-left:3px;}
+.pnode.col .chev{transform:rotate(-90deg);}
+.pnode.col .node-body-row,.pnode.col .nfeat-wrap{display:none;}
+
+/* Body row: controls + 3 previews */
+.node-body-row{display:grid;grid-template-columns:var(--ctrl) 1fr 1fr 1fr;min-height:60px;}
+.nbody{padding:10px 10px;border-right:1px solid var(--bdr2);background:var(--surf3);}
+.nprev-cell{border-right:1px solid var(--bdr2);background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70px;position:relative;overflow:hidden;}
+.nprev-cell:last-child{border-right:none;}
+.npempty{color:var(--txd);font-size:9px;padding:12px 8px;text-align:center;}
+.ndim{position:absolute;bottom:3px;right:5px;font-size:8px;color:var(--txd);}
+.nstatus{position:absolute;top:3px;left:5px;font-size:8px;padding:1px 4px;border-radius:2px;letter-spacing:.05em;}
+.st-live{background:rgba(79,255,176,.1);color:var(--ac);}
+.ncol-lbl{position:absolute;top:3px;right:5px;font-size:8px;color:var(--txd);letter-spacing:.06em;}
+
+/* Controls */
+.cg{margin-bottom:8px;}
+.cg:last-child{margin-bottom:0;}
+label.cl{display:block;font-size:9px;color:var(--txd);letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px;}
+.crow{display:flex;align-items:center;gap:6px;}
+input[type=range]{flex:1;-webkit-appearance:none;height:2px;background:var(--bdr2);border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;background:var(--ac);border-radius:50%;cursor:pointer;box-shadow:0 0 4px rgba(79,255,176,.5);}
+.rv{min-width:32px;text-align:right;font-size:10px;color:var(--ac);flex-shrink:0;}
+select{width:100%;background:var(--surf2);border:1px solid var(--bdr2);color:var(--tx);padding:5px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;outline:none;}
+select:focus{border-color:var(--ac);}
+.ckrow{display:flex;align-items:center;gap:6px;}
+input[type=checkbox]{width:11px;height:11px;accent-color:var(--ac);cursor:pointer;}
+
+/* Feature section */
+.nfeat-wrap{border-top:1px solid var(--bdr);}
+.feat-toggle{width:100%;padding:5px 10px;background:none;border:none;color:var(--txd);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:.13s;letter-spacing:.06em;text-transform:uppercase;}
+.feat-toggle:hover{color:var(--ac5);background:rgba(192,132,252,.05);}
+.feat-toggle .ft-chev{margin-left:auto;transition:.18s;font-size:8px;}
+.feat-open .ft-chev{transform:rotate(180deg);}
+.feat-body{display:none;background:var(--surf3);}
+.feat-open+.feat-body{display:grid;grid-template-columns:var(--ctrl) 1fr 1fr 1fr;}
+.feat-ctrl-cell{padding:10px;border-right:1px solid var(--bdr2);}
+.feat-run-btn{width:100%;padding:6px;background:rgba(192,132,252,.07);border:1px solid rgba(192,132,252,.25);color:var(--ac5);font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:3px;cursor:pointer;transition:.14s;}
+.feat-run-btn:hover{background:rgba(192,132,252,.14);}
+.feat-res-cell{border-right:1px solid var(--bdr2);padding:8px;font-size:9px;overflow-y:auto;max-height:260px;}
+.feat-res-cell:last-child{border-right:none;}
+.feat-empty{color:var(--txd);font-size:9px;padding:8px;}
+.fs-title{font-size:8px;color:var(--txd);letter-spacing:.1em;text-transform:uppercase;margin:6px 0 4px;padding-bottom:3px;border-bottom:1px solid var(--bdr2);}
+.frow{display:flex;justify-content:space-between;gap:4px;padding:1px 0;}
+.frow span:first-child{color:var(--txd);font-size:8px;}
+.frow span:last-child{color:var(--txb);font-size:8px;font-weight:600;text-align:right;}
+.comp-mini{background:var(--surf2);border:1px solid var(--bdr);border-radius:2px;padding:4px 6px;margin-bottom:4px;}
+.comp-mini-title{color:var(--ac5);font-size:8px;margin-bottom:3px;}
+.corner-btn{margin-top:5px;width:100%;padding:4px;background:none;border:1px solid rgba(255,209,102,.2);color:var(--ac3);font-family:'JetBrains Mono',monospace;font-size:8px;border-radius:2px;cursor:pointer;}
+.corner-btn:hover{background:rgba(255,209,102,.08);}
+
+/* Pixel tooltip */
+.px-tip{position:fixed;pointer-events:none;z-index:9999;background:rgba(6,7,13,.97);border:1px solid var(--bdr3);border-radius:4px;padding:6px 10px;font-size:10px;line-height:1.7;display:none;min-width:110px;}
+.px-row{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.px-key{color:var(--txd);font-size:9px;}
+.px-val{font-weight:700;}
+.px-sw{width:12px;height:12px;border-radius:2px;border:1px solid var(--bdr3);flex-shrink:0;}
+
+/* Empty hint */
+.empty-hint{padding:28px;text-align:center;color:var(--txd);font-size:10px;line-height:2;}
+
+/* Canvas wrapper — overlay anchors to this */
+.cv-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;line-height:0;max-width:100%;}
+.cv-wrap canvas{max-width:100%;max-height:180px;display:block;cursor:crosshair;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">IMG <em>PIPELINE</em> <span style="color:var(--ac3);font-size:11px">×3</span></div>
+  <div class="hbadge">3-IMAGE COMPARE</div>
+  <div class="hright">
+    <button class="hbtn undo" id="undoBtn" onclick="undo()" disabled>↩ 回上一步</button>
+    <span class="hundo-cnt" id="undoCnt"></span>
+    <button class="hbtn" onclick="clearAll()">清除步驟</button>
+    <button class="hbtn pri" onclick="rerunAll()">↺ 重新執行</button>
+  </div>
+</header>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sb">
+    <div class="sb-sec">
+      <div class="sb-ttl">加入步驟</div>
+      <div class="step-list">
+        <button class="stype" onclick="addStep('color')">     <span class="si">◈</span>色彩空間</button>
+        <button class="stype" onclick="addStep('contrast')">  <span class="si">◑</span>對比度增強</button>
+        <button class="stype" onclick="addStep('edge')">      <span class="si">△</span>邊緣偵測</button>
+        <button class="stype" onclick="addStep('threshold')"> <span class="si">▪</span>手動二值化</button>
+        <button class="stype" onclick="addStep('otsu')">      <span class="si">◧</span>Otsu 二值化</button>
+        <button class="stype" onclick="addStep('dilate')">    <span class="si">⊕</span>膨脹</button>
+        <button class="stype" onclick="addStep('erode')">     <span class="si">⊖</span>侵蝕</button>
+        <button class="stype" onclick="addStep('open')">      <span class="si">○</span>開運算</button>
+        <button class="stype" onclick="addStep('close')">     <span class="si">●</span>閉運算</button>
+        <button class="stype" onclick="addStep('fill')">      <span class="si">⬛</span>孔洞填滿</button>
+        <button class="stype" onclick="addStep('resize')">    <span class="si">⇲</span>縮放/旋轉</button>
+      </div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="sb-sec">
+      <div class="sb-ttl">說明</div>
+      <div class="sb-hint">
+        三欄並排比較<br>
+        相同參數套用<br>
+        三張影像<br><br>
+        <b>↩</b> 回上一步<br>
+        調參→<span>即時更新</span><br>
+        滑鼠→像素 RGB<br>
+        <b>📊</b> 特徵分析
+      </div>
+    </div>
+  </div>
+
+  <!-- Main pipeline -->
+  <div class="pipe-wrap" id="pipeWrap">
+    <!-- Input row -->
+    <div class="input-row" id="inputRow">
+      <div class="input-label-cell">
+        <span class="input-tag">INPUT</span>
+      </div>
+      <!-- 3 slots generated by JS -->
+    </div>
+
+    <!-- Steps injected here -->
+    <div id="pipe">
+      <div class="empty-hint">← 從左側加入處理步驟<br>三張影像使用相同參數<br>調整參數後即時比較結果</div>
+    </div>
+  </div>
+</div>
+
+<!-- Pixel tooltip -->
+<div class="px-tip" id="pxTip">
+  <div class="px-row" style="margin-bottom:4px">
+    <span class="px-key">COLOR</span><div class="px-sw" id="pxSw"></div>
+  </div>
+  <div class="px-row"><span class="px-key">R</span><span class="px-val" id="pxR" style="color:#ff6b6b">—</span></div>
+  <div class="px-row"><span class="px-key">G</span><span class="px-val" id="pxG" style="color:#69db7c">—</span></div>
+  <div class="px-row"><span class="px-key">B</span><span class="px-val" id="pxB" style="color:#4dabf7">—</span></div>
+  <div class="px-row" style="margin-top:2px"><span class="px-key">POS</span><span class="px-val" id="pxPos" style="color:var(--txd);font-size:9px">—</span></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+const NUM_IMGS = 3;
+let srcs = [null,null,null];  // each: {data:ImageData, w, h}
+let steps = [], sid = 0;
+let history = [], runTimer = null;
+
+const IMG_LABELS = ['IMG-A','IMG-B','IMG-C'];
+const IMG_COLORS = ['#4fffb0','#4db8ff','#ffd166'];
+
+const META={
+  color:    {label:'色彩空間',  color:'#ff88cc'},
+  contrast: {label:'對比度增強',color:'#ffd166'},
+  edge:     {label:'邊緣偵測',  color:'#ff4d6a'},
+  threshold:{label:'手動二值化',color:'#c084fc'},
+  otsu:     {label:'Otsu 二值化',color:'#4fffb0'},
+  dilate:   {label:'膨脹',      color:'#4db8ff'},
+  erode:    {label:'侵蝕',      color:'#f87171'},
+  open:     {label:'開運算',    color:'#34d399'},
+  close:    {label:'閉運算',    color:'#a78bfa'},
+  fill:     {label:'孔洞填滿',  color:'#fbbf24'},
+  resize:   {label:'縮放/旋轉', color:'#60a5fa'},
+};
+const DEF={
+  color:    {mode:'灰階'},
+  contrast: {base:'灰階',method:'CLAHE',clip:2,tile:8},
+  edge:     {base:'灰階',method:'Canny',blur:3,t1:80,t2:160},
+  threshold:{base:'灰階',thr:128,inv:false},
+  otsu:     {base:'灰階',blur:3,inv:false},
+  dilate:   {shape:'橢圓',ksize:3,iter:1},
+  erode:    {shape:'橢圓',ksize:3,iter:1},
+  open:     {shape:'橢圓',ksize:3},
+  close:    {shape:'橢圓',ksize:3},
+  fill:     {mode:'填補孔洞'},
+  resize:   {scale:1,angle:0,expand:true},
+};
+const COLOR_MODES=['彩色','灰階','HSV(H,S,V)','HSV-H','HSV-S','HSV-V','LAB(L,a,b)','LAB-L','LAB-a','LAB-b','YCrCb(Y,Cr,Cb)','YCrCb-Y','YCrCb-Cr','YCrCb-Cb'];
+const BASE_MODES=['灰階','彩色','HSV-V','LAB-L','YCrCb-Y'];
+const SHAPES=['橢圓','矩形','十字'];
+
+// ═══════════════════════════════════════════
+//  UNDO
+// ═══════════════════════════════════════════
+function snapSteps(){return steps.map(s=>({id:s.id,type:s.type,params:JSON.parse(JSON.stringify(s.params))}));}
+function pushHistory(){history.push(snapSteps());if(history.length>30)history.shift();updateUndoBtn();}
+function updateUndoBtn(){const b=document.getElementById('undoBtn'),c=document.getElementById('undoCnt');b.disabled=!history.length;c.textContent=history.length?`(${history.length})`:'';
+}
+function undo(){if(!history.length)return;const snap=history.pop();steps=snap.map(s=>({...s,outputs:[null,null,null]}));sid=steps.length?Math.max(...steps.map(s=>s.id)):sid;rebuildPipe();rerunAll();updateUndoBtn();}
+
+// ═══════════════════════════════════════════
+//  PIXEL MATH
+// ═══════════════════════════════════════════
+function px_hsv(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;const s=mx?d/mx:0,v=mx;if(d){if(mx===r)h=((g-b)/d+(g<b?6:0))/6;else if(mx===g)h=((b-r)/d+2)/6;else h=((r-g)/d+4)/6;}return[Math.round(h*255),Math.round(s*255),Math.round(v*255)];}
+function px_lab(r,g,b){function lin(c){c/=255;return c>.04045?Math.pow((c+.055)/1.055,2.4):c/12.92;}const R=lin(r),G=lin(g),B=lin(b);const X=R*.4124564+G*.3575761+B*.1804375,Y=R*.2126729+G*.7151522+B*.0721750,Z=R*.0193339+G*.1191920+B*.9503041;function f(t){return t>.008856?Math.cbrt(t):7.787*t+16/116;}const fx=f(X/.95047),fy=f(Y),fz=f(Z/1.08883);return[Math.max(0,Math.min(255,Math.round((116*fy-16)*255/100))),Math.max(0,Math.min(255,Math.round(500*(fx-fy)+128))),Math.max(0,Math.min(255,Math.round(200*(fy-fz)+128)))];}
+function px_ycc(r,g,b){const Y=Math.round(.299*r+.587*g+.114*b);return[Math.max(0,Math.min(255,Y)),Math.max(0,Math.min(255,Math.round((r-Y)*.713+128))),Math.max(0,Math.min(255,Math.round((b-Y)*.564+128)))];}
+function toRGBA(inp){const{w,h}=inp,n=w*h;if(inp.type==='rgba')return inp.data;if(inp.type==='gray'){const o=new Uint8Array(n*4);for(let i=0;i<n;i++){const v=inp.data[i];o[i*4]=v;o[i*4+1]=v;o[i*4+2]=v;o[i*4+3]=255;}return o;}const o=new Uint8Array(n*4);for(let i=0;i<n;i++){o[i*4]=inp.data[i*3];o[i*4+1]=inp.data[i*3+1];o[i*4+2]=inp.data[i*3+2];o[i*4+3]=255;}return o;}
+function toRGB3(inp){const{w,h}=inp,n=w*h,rgba=toRGBA(inp),o=new Uint8Array(n*3);for(let i=0;i<n;i++){o[i*3]=rgba[i*4];o[i*3+1]=rgba[i*4+1];o[i*3+2]=rgba[i*4+2];}return o;}
+function toGray1(inp){if(inp.type==='gray')return inp.data;const rgba=toRGBA(inp),n=inp.w*inp.h,o=new Uint8Array(n);for(let i=0;i<n;i++)o[i]=Math.round(.299*rgba[i*4]+.587*rgba[i*4+1]+.114*rgba[i*4+2]);return o;}
+function grayInp(inp,base){if(base==='灰階')return{type:'gray',data:toGray1(inp),w:inp.w,h:inp.h};return cvtColor(inp,base);}
+
+// ═══════════════════════════════════════════
+//  COLOR SPACE
+// ═══════════════════════════════════════════
+function cvtColor(inp,mode){
+  const{w,h}=inp,n=w*h,rgba=toRGBA(inp);
+  if(mode==='彩色'){const o=new Uint8Array(n*3);for(let i=0;i<n;i++){o[i*3]=rgba[i*4];o[i*3+1]=rgba[i*4+1];o[i*3+2]=rgba[i*4+2];}return{type:'rgb',data:o,w,h};}
+  if(mode==='灰階'){const o=new Uint8Array(n);for(let i=0;i<n;i++)o[i]=Math.round(.299*rgba[i*4]+.587*rgba[i*4+1]+.114*rgba[i*4+2]);return{type:'gray',data:o,w,h};}
+  if(mode==='HSV(H,S,V)'){const o=new Uint8Array(n*3);for(let i=0;i<n;i++){const v=px_hsv(rgba[i*4],rgba[i*4+1],rgba[i*4+2]);o[i*3]=v[0];o[i*3+1]=v[1];o[i*3+2]=v[2];}return{type:'rgb',data:o,w,h};}
+  if(mode.startsWith('HSV-')){const c={H:0,S:1,V:2}[mode[4]];const o=new Uint8Array(n);for(let i=0;i<n;i++)o[i]=px_hsv(rgba[i*4],rgba[i*4+1],rgba[i*4+2])[c];return{type:'gray',data:o,w,h};}
+  if(mode==='LAB(L,a,b)'){const o=new Uint8Array(n*3);for(let i=0;i<n;i++){const v=px_lab(rgba[i*4],rgba[i*4+1],rgba[i*4+2]);o[i*3]=v[0];o[i*3+1]=v[1];o[i*3+2]=v[2];}return{type:'rgb',data:o,w,h};}
+  if(mode.startsWith('LAB-')){const c={L:0,a:1,b:2}[mode[4]];const o=new Uint8Array(n);for(let i=0;i<n;i++)o[i]=px_lab(rgba[i*4],rgba[i*4+1],rgba[i*4+2])[c];return{type:'gray',data:o,w,h};}
+  if(mode==='YCrCb(Y,Cr,Cb)'){const o=new Uint8Array(n*3);for(let i=0;i<n;i++){const v=px_ycc(rgba[i*4],rgba[i*4+1],rgba[i*4+2]);o[i*3]=v[0];o[i*3+1]=v[1];o[i*3+2]=v[2];}return{type:'rgb',data:o,w,h};}
+  if(mode.startsWith('YCrCb-')){const c={Y:0,Cr:1,Cb:2}[mode.slice(6)];const o=new Uint8Array(n);for(let i=0;i<n;i++)o[i]=px_ycc(rgba[i*4],rgba[i*4+1],rgba[i*4+2])[c];return{type:'gray',data:o,w,h};}
+  return inp;
+}
+
+// ═══════════════════════════════════════════
+//  DSP / MORPH
+// ═══════════════════════════════════════════
+function gaussBlur(g,w,h,ks){ks=Math.max(1,ks|0);if(ks%2===0)ks++;if(ks<3)return Float32Array.from(g);const half=ks>>1,sig=.3*((ks-1)*.5-1)+.8,k=new Float32Array(ks);let sum=0;for(let x=-half;x<=half;x++){k[x+half]=Math.exp(-x*x/(2*sig*sig));sum+=k[x+half];}for(let i=0;i<ks;i++)k[i]/=sum;const tmp=new Float32Array(w*h),out=new Float32Array(w*h);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let v=0;for(let kx=-half;kx<=half;kx++)v+=g[y*w+Math.max(0,Math.min(w-1,x+kx))]*k[kx+half];tmp[y*w+x]=v;}for(let y=0;y<h;y++)for(let x=0;x<w;x++){let v=0;for(let ky=-half;ky<=half;ky++)v+=tmp[Math.max(0,Math.min(h-1,y+ky))*w+x]*k[ky+half];out[y*w+x]=v;}return out;}
+function sobelOp(g,w,h){const gx=new Float32Array(w*h),gy=new Float32Array(w*h),Kx=[-1,0,1,-2,0,2,-1,0,1],Ky=[-1,-2,-1,0,0,0,1,2,1];for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){let sx=0,sy=0;for(let ky=-1;ky<=1;ky++)for(let kx=-1;kx<=1;kx++){const v=g[(y+ky)*w+(x+kx)],ki=(ky+1)*3+(kx+1);sx+=v*Kx[ki];sy+=v*Ky[ki];}gx[y*w+x]=sx;gy[y*w+x]=sy;}return{gx,gy};}
+function canny(g,w,h,t1,t2){const{gx,gy}=sobelOp(g,w,h);const mag=new Float32Array(w*h),ang=new Float32Array(w*h);let mx=0;for(let i=0;i<w*h;i++){mag[i]=Math.sqrt(gx[i]*gx[i]+gy[i]*gy[i]);if(mag[i]>mx)mx=mag[i];let a=Math.atan2(gy[i],gx[i])*180/Math.PI;if(a<0)a+=180;ang[i]=a;}const s=mx/255,st1=t1*s,st2=t2*s,nms=new Float32Array(w*h);for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const i=y*w+x,a=ang[i];let q,r;if(a<22.5||a>=157.5){q=mag[y*w+x+1];r=mag[y*w+x-1];}else if(a<67.5){q=mag[(y+1)*w+x-1];r=mag[(y-1)*w+x+1];}else if(a<112.5){q=mag[(y+1)*w+x];r=mag[(y-1)*w+x];}else{q=mag[(y-1)*w+x-1];r=mag[(y+1)*w+x+1];}nms[i]=(mag[i]>=q&&mag[i]>=r)?mag[i]:0;}const out=new Uint8Array(w*h),seeds=[];for(let i=0;i<w*h;i++){if(nms[i]>=st2){out[i]=255;seeds.push(i);}else if(nms[i]>=st1)out[i]=1;}let hd=0;while(hd<seeds.length){const idx=seeds[hd++],x=idx%w,y=(idx/w)|0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;if(nx<0||nx>=w||ny<0||ny>=h)continue;const ni=ny*w+nx;if(out[ni]===1){out[ni]=255;seeds.push(ni);}}}for(let i=0;i<w*h;i++)if(out[i]===1)out[i]=0;return out;}
+function sobelEdge(g,w,h){const{gx,gy}=sobelOp(g,w,h);let mx=0;const mag=new Float32Array(w*h);for(let i=0;i<w*h;i++){mag[i]=Math.sqrt(gx[i]*gx[i]+gy[i]*gy[i]);if(mag[i]>mx)mx=mag[i];}const out=new Uint8Array(w*h);if(mx>0)for(let i=0;i<w*h;i++)out[i]=Math.round(mag[i]/mx*255);return out;}
+function laplacian(g,w,h){const L=[0,1,0,1,-4,1,0,1,0];let mx=0;const raw=new Float32Array(w*h);for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){let v=0;for(let ky=-1;ky<=1;ky++)for(let kx=-1;kx<=1;kx++)v+=g[(y+ky)*w+(x+kx)]*L[(ky+1)*3+(kx+1)];raw[y*w+x]=Math.abs(v);if(raw[y*w+x]>mx)mx=raw[y*w+x];}const out=new Uint8Array(w*h);if(mx>0)for(let i=0;i<w*h;i++)out[i]=Math.round(raw[i]/mx*255);return out;}
+function histEq(g,w,h){const hist=new Int32Array(256),n=w*h;for(let i=0;i<n;i++)hist[g[i]]++;let c=0,cmin=-1;const cdf=new Int32Array(256);for(let i=0;i<256;i++){c+=hist[i];cdf[i]=c;if(cmin<0&&c>0)cmin=c;}const lut=new Uint8Array(256);for(let i=0;i<256;i++)lut[i]=Math.round((cdf[i]-cmin)/(n-cmin)*255);const out=new Uint8Array(n);for(let i=0;i<n;i++)out[i]=lut[g[i]];return out;}
+function clahe(g,w,h,cl,nt){const n=w*h;function tLUT(tx,ty){const x0=Math.round(tx*w/nt),x1=Math.round((tx+1)*w/nt),y0=Math.round(ty*h/nt),y1=Math.round((ty+1)*h/nt),hist=new Int32Array(256);let cnt=0;for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){hist[g[y*w+x]]++;cnt++;}const lim=Math.max(1,Math.round(cl*cnt/256));let ex=0;for(let i=0;i<256;i++){if(hist[i]>lim){ex+=hist[i]-lim;hist[i]=lim;}}const add=Math.floor(ex/256),rem=ex-add*256;for(let i=0;i<256;i++){hist[i]+=add;if(i<rem)hist[i]++;}const lut=new Uint8Array(256);let cd=0;for(let i=0;i<256;i++){cd+=hist[i];lut[i]=Math.min(255,Math.round(cd*255/cnt));}return lut;}const luts=[];for(let ty=0;ty<nt;ty++)for(let tx=0;tx<nt;tx++)luts.push(tLUT(tx,ty));const out=new Uint8Array(n);for(let y=0;y<h;y++)for(let x=0;x<w;x++){const tx_=x*nt/w-.5,ty_=y*nt/h-.5,tx0=Math.max(0,Math.floor(tx_)),ty0=Math.max(0,Math.floor(ty_)),tx1=Math.min(nt-1,tx0+1),ty1=Math.min(nt-1,ty0+1),fx=Math.max(0,Math.min(1,tx_-tx0)),fy=Math.max(0,Math.min(1,ty_-ty0)),v=g[y*w+x];out[y*w+x]=Math.round(luts[ty0*nt+tx0][v]*(1-fx)*(1-fy)+luts[ty0*nt+tx1][v]*fx*(1-fy)+luts[ty1*nt+tx0][v]*(1-fx)*fy+luts[ty1*nt+tx1][v]*fx*fy);}return out;}
+function otsuThr(g,w,h){const hist=new Int32Array(256),n=w*h;for(let i=0;i<n;i++)hist[g[i]|0]++;let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sB=0,wB=0,mx=0,thr=0;for(let t=0;t<256;t++){wB+=hist[t];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=t*hist[t];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>mx){mx=v;thr=t;}}return thr;}
+function makeKernel(ks,shape){const half=ks>>1,k=[];for(let ky=-half;ky<=half;ky++)for(let kx=-half;kx<=half;kx++){if(shape==='矩形'){k.push([kx,ky]);continue;}if(shape==='十字'){if(kx===0||ky===0)k.push([kx,ky]);continue;}if(half===0){k.push([kx,ky]);continue;}if((kx/half)*(kx/half)+(ky/half)*(ky/half)<=1)k.push([kx,ky]);}return k;}
+function morphOpK(bin,w,h,kernel,op){const out=new Uint8Array(w*h);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let res=op==='erode'?255:0,done=false;for(const[kx,ky] of kernel){if(done)break;const nx=x+kx,ny=y+ky;if(nx<0||nx>=w||ny<0||ny>=h){if(op==='erode'){res=0;done=true;}continue;}const v=bin[ny*w+nx];if(op==='dilate'&&v===255){res=255;done=true;}else if(op==='erode'&&v===0){res=0;done=true;}}out[y*w+x]=res;}return out;}
+function morphRun(bin,w,h,ks,shape,op,iter=1){const kernel=makeKernel(ks,shape);let cur=bin;for(let i=0;i<iter;i++)cur=morphOpK(cur,w,h,kernel,op);return cur;}
+function ensureBinary(inp){const{w,h}=inp,n=w*h,g=toGray1(inp),o=new Uint8Array(n);for(let i=0;i<n;i++)o[i]=g[i]>127?255:0;return{type:'gray',data:o,w,h};}
+function bgMask(bin,w,h){const n=w*h,vis=new Uint8Array(n),q=new Int32Array(n);let hd=0,tl=0;function enq(i){if(!vis[i]&&bin[i]===0){vis[i]=1;q[tl++]=i;}}for(let x=0;x<w;x++){enq(x);enq((h-1)*w+x);}for(let y=1;y<h-1;y++){enq(y*w);enq(y*w+w-1);}while(hd<tl){const i=q[hd++],x=i%w,y=(i/w)|0;if(y>0)enq(i-w);if(y<h-1)enq(i+w);if(x>0)enq(i-1);if(x<w-1)enq(i+1);}return vis;}
+function fillHolesOp(bin,w,h){const bg=bgMask(bin,w,h),out=new Uint8Array(w*h);for(let i=0;i<w*h;i++)out[i]=(bin[i]===255||!bg[i])?255:0;return out;}
+function fillLargest(bin,w,h){const n=w*h,lbl=new Int32Array(n).fill(-1);const sz=[];let nl=0;for(let s=0;s<n;s++){if(bin[s]!==255||lbl[s]!==-1)continue;const L=nl++,q=[s];lbl[s]=L;let c=0,hd=0;while(hd<q.length){const i=q[hd++];c++;const x=i%w,y=(i/w)|0;for(const ni of[y>0?i-w:-1,y<h-1?i+w:-1,x>0?i-1:-1,x<w-1?i+1:-1])if(ni>=0&&bin[ni]===255&&lbl[ni]===-1){lbl[ni]=L;q.push(ni);}}sz.push(c);}if(!nl)return bin;const best=sz.indexOf(Math.max(...sz));const only=new Uint8Array(n);for(let i=0;i<n;i++)if(lbl[i]===best)only[i]=255;return fillHolesOp(only,w,h);}
+function bilinear3(rgb,sw,sh,dw,dh){const out=new Uint8Array(dw*dh*3),sx=sw/dw,sy=sh/dh;for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){const fx=x*sx,fy=y*sy,x0=Math.min(sw-1,fx|0),y0=Math.min(sh-1,fy|0),x1=Math.min(sw-1,x0+1),y1=Math.min(sh-1,y0+1),wx=fx-x0,wy=fy-y0,di=(y*dw+x)*3;for(let c=0;c<3;c++){const a=rgb[(y0*sw+x0)*3+c],b=rgb[(y0*sw+x1)*3+c],cc=rgb[(y1*sw+x0)*3+c],d=rgb[(y1*sw+x1)*3+c];out[di+c]=Math.round(a*(1-wx)*(1-wy)+b*wx*(1-wy)+cc*(1-wx)*wy+d*wx*wy);}}return out;}
+function rotateSrc(src,sw,sh,ch,angle,expand){const rad=angle*Math.PI/180,cos=Math.cos(rad),sin=Math.sin(rad),ac=Math.abs(cos),as=Math.abs(sin);let dw=sw,dh=sh;if(expand){dw=Math.round(sh*as+sw*ac);dh=Math.round(sh*ac+sw*as);}const ncx=dw/2,ncy=dh/2,scx=sw/2,scy=sh/2,out=new Uint8Array(dw*dh*ch);for(let y=0;y<dh;y++)for(let x=0;x<dw;x++){const dx=x-ncx,dy=y-ncy,sx2=Math.round(cos*dx+sin*dy+scx),sy2=Math.round(-sin*dx+cos*dy+scy);if(sx2<0||sx2>=sw||sy2<0||sy2>=sh)continue;const si=(sy2*sw+sx2)*ch,di=(y*dw+x)*ch;for(let c=0;c<ch;c++)out[di+c]=src[si+c];}return{data:out,w:dw,h:dh};}
+
+// ═══════════════════════════════════════════
+//  PROCESS ONE STEP (single image)
+// ═══════════════════════════════════════════
+function processStep(step,inp){
+  const p=step.params,{w,h}=inp;
+  if(step.type==='color')return cvtColor(inp,p.mode);
+  if(step.type==='contrast'){const bg=grayInp(inp,p.base),g=bg.type==='gray'?bg.data:toGray1(bg);return{type:'gray',data:p.method==='HE'?histEq(g,w,h):clahe(g,w,h,p.clip,p.tile),w,h};}
+  if(step.type==='edge'){const bg=grayInp(inp,p.base),gf=gaussBlur(bg.type==='gray'?bg.data:toGray1(bg),w,h,p.blur);let out;if(p.method==='Canny')out=canny(gf,w,h,p.t1,p.t2);else if(p.method==='Sobel')out=sobelEdge(gf,w,h);else out=laplacian(gf,w,h);return{type:'gray',data:out,w,h};}
+  if(step.type==='threshold'){const bg=grayInp(inp,p.base),g=bg.type==='gray'?bg.data:toGray1(bg);const out=new Uint8Array(w*h);for(let i=0;i<w*h;i++){const v=g[i]>p.thr?255:0;out[i]=p.inv?255-v:v;}return{type:'gray',data:out,w,h};}
+  if(step.type==='otsu'){const bg=grayInp(inp,p.base),gf=gaussBlur(bg.type==='gray'?bg.data:toGray1(bg),w,h,p.blur);const thr=otsuThr(gf,w,h);const out=new Uint8Array(w*h);for(let i=0;i<w*h;i++){const v=gf[i]>thr?255:0;out[i]=p.inv?255-v:v;}return{type:'gray',data:out,w,h,_thr:thr};}
+  if(step.type==='dilate'){const bin=ensureBinary(inp);return{type:'gray',data:morphRun(bin.data,w,h,p.ksize,p.shape,'dilate',p.iter),w,h};}
+  if(step.type==='erode'){const bin=ensureBinary(inp);return{type:'gray',data:morphRun(bin.data,w,h,p.ksize,p.shape,'erode',p.iter),w,h};}
+  if(step.type==='open'){const bin=ensureBinary(inp);const e=morphRun(bin.data,w,h,p.ksize,p.shape,'erode',1);return{type:'gray',data:morphRun(e,w,h,p.ksize,p.shape,'dilate',1),w,h};}
+  if(step.type==='close'){const bin=ensureBinary(inp);const d=morphRun(bin.data,w,h,p.ksize,p.shape,'dilate',1);return{type:'gray',data:morphRun(d,w,h,p.ksize,p.shape,'erode',1),w,h};}
+  if(step.type==='fill'){const bin=ensureBinary(inp);return{type:'gray',data:p.mode==='只填滿最大輪廓'?fillLargest(bin.data,w,h):fillHolesOp(bin.data,w,h),w,h};}
+  if(step.type==='resize'){let rgb=toRGB3(inp),rw=w,rh=h;if(Math.abs(p.scale-1)>.001){rw=Math.max(1,Math.round(w*p.scale));rh=Math.max(1,Math.round(h*p.scale));rgb=bilinear3(rgb,w,h,rw,rh);}if(Math.abs(p.angle)>.001){const r=rotateSrc(rgb,rw,rh,3,p.angle,p.expand);return{type:'rgb',data:r.data,w:r.w,h:r.h};}return{type:'rgb',data:rgb,w:rw,h:rh};}
+}
+
+// ═══════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════
+function renderOut(cv,out){
+  if(!cv||!out)return;
+  const{w,h}=out;cv.width=w;cv.height=h;
+  const ctx=cv.getContext('2d'),id=ctx.createImageData(w,h),n=w*h;
+  if(out.type==='gray'){for(let i=0;i<n;i++){const v=out.data[i]|0;id.data[i*4]=v;id.data[i*4+1]=v;id.data[i*4+2]=v;id.data[i*4+3]=255;}}
+  else{for(let i=0;i<n;i++){id.data[i*4]=out.data[i*3];id.data[i*4+1]=out.data[i*3+1];id.data[i*4+2]=out.data[i*3+2];id.data[i*4+3]=255;}}
+  ctx.putImageData(id,0,0);cv.style.display='block';
+}
+
+// ═══════════════════════════════════════════
+//  RUN
+// ═══════════════════════════════════════════
+function runFrom(fromIdx){
+  // For each image slot, run the pipeline from fromIdx
+  for(let imgIdx=0;imgIdx<NUM_IMGS;imgIdx++){
+    if(!srcs[imgIdx])continue;
+    let cur = fromIdx===0
+      ? {type:'rgba',data:srcs[imgIdx].data.data,w:srcs[imgIdx].w,h:srcs[imgIdx].h}
+      : steps[fromIdx-1]?.outputs[imgIdx];
+    if(!cur)continue;
+    for(let i=fromIdx;i<steps.length;i++){
+      const step=steps[i];
+      if(!step.outputs)step.outputs=[null,null,null];
+      try{
+        step.outputs[imgIdx]=processStep(step,cur);
+        cur=step.outputs[imgIdx];
+        // render
+        const cv=document.getElementById(`cv-${step.id}-${imgIdx}`);
+        const cell=document.getElementById(`cell-${step.id}-${imgIdx}`);
+        if(cv&&cell){
+          renderOut(cv,step.outputs[imgIdx]);
+          cell.querySelector('.npempty')&&(cell.querySelector('.npempty').style.display='none');
+          const dim=cell.querySelector('.ndim');if(dim)dim.textContent=step.outputs[imgIdx].w+'×'+step.outputs[imgIdx].h;
+          let st=cell.querySelector('.nstatus');
+          if(!st){st=document.createElement('div');st.className='nstatus';cell.appendChild(st);}
+          st.className='nstatus st-live';
+          st.textContent=step.outputs[imgIdx]._thr!==undefined?'THR='+step.outputs[imgIdx]._thr:'LIVE';
+          bindPxInspector(cv,step.outputs[imgIdx]);
+        }
+      }catch(e){console.warn('step',step.id,'img',imgIdx,e);}
+    }
+  }
+}
+function scheduleRun(fromIdx){clearTimeout(runTimer);runTimer=setTimeout(()=>runFrom(fromIdx),60);}
+function rerunAll(){runFrom(0);}
+
+// ═══════════════════════════════════════════
+//  FEATURE ANALYSIS
+// ═══════════════════════════════════════════
+function analyzeComponents(bin,w,h){const n=w*h,lbl=new Int32Array(n).fill(-1);const comps=[];let nl=0;for(let s=0;s<n;s++){if(bin[s]!==255||lbl[s]!==-1)continue;const L=nl++,q=new Int32Array(n);let qh=0,qt=0;q[qt++]=s;lbl[s]=L;let area=0,sumX=0,sumY=0,minX=w,maxX=0,minY=h,maxY=0,perim=0;while(qh<qt){const i=q[qh++];area++;const x=i%w,y=(i/w)|0;sumX+=x;sumY+=y;if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;let isBorder=false;for(const[dx,dy] of[[-1,0],[1,0],[0,-1],[0,1]]){const nx=x+dx,ny=y+dy;if(nx<0||nx>=w||ny<0||ny>=h||bin[ny*w+nx]===0){isBorder=true;break;}}if(isBorder)perim++;for(const ni of[y>0?i-w:-1,y<h-1?i+w:-1,x>0?i-1:-1,x<w-1?i+1:-1])if(ni>=0&&bin[ni]===255&&lbl[ni]===-1){lbl[ni]=L;q[qt++]=ni;}}const circ=perim>0?(4*Math.PI*area)/(perim*perim):0;comps.push({area,cx:(sumX/area).toFixed(1),cy:(sumY/area).toFixed(1),bw:maxX-minX+1,bh:maxY-minY+1,perim,circ});}comps.sort((a,b)=>b.area-a.area);return comps;}
+function harrisCorners(g,w,h){const{gx,gy}=sobelOp(g,w,h);const Ix2=new Float32Array(w*h),Iy2=new Float32Array(w*h),Ixy=new Float32Array(w*h);for(let i=0;i<w*h;i++){Ix2[i]=gx[i]*gx[i];Iy2[i]=gy[i]*gy[i];Ixy[i]=gx[i]*gy[i];}const sIx2=gaussBlur(Ix2,w,h,5),sIy2=gaussBlur(Iy2,w,h,5),sIxy=gaussBlur(Ixy,w,h,5);const k=0.04,R=new Float32Array(w*h);let maxR=0;for(let i=0;i<w*h;i++){const det=sIx2[i]*sIy2[i]-sIxy[i]*sIxy[i],tr=sIx2[i]+sIy2[i];R[i]=det-k*tr*tr;if(R[i]>maxR)maxR=R[i];}const thr=maxR*0.02;const corners=[];for(let y=3;y<h-3;y++)for(let x=3;x<w-3;x++){const i=y*w+x;if(R[i]<thr)continue;let isMax=true;for(let dy=-2;dy<=2&&isMax;dy++)for(let dx=-2;dx<=2&&isMax;dx++){if(!dx&&!dy)continue;if(R[(y+dy)*w+(x+dx)]>=R[i])isMax=false;}if(isMax)corners.push({x,y,r:R[i]});}corners.sort((a,b)=>b.r-a.r);return corners.slice(0,500);}
+
+function runAnalysis(stepId,imgIdx){
+  const step=steps.find(s=>s.id===stepId);
+  const out=step?.outputs?.[imgIdx];
+  if(!out){alert('請先執行該步驟');return;}
+  const el=document.getElementById(`fr-${stepId}-${imgIdx}`);
+  if(!el)return;
+  el.innerHTML='<div style="color:var(--txd);font-size:9px;padding:8px">⏳ 分析中…</div>';
+  setTimeout(()=>{
+    const{w,h}=out,n=w*h;
+    const g=toGray1(out);
+    let sumG=0,sumG2=0,mnG=255,mxG=0;for(let i=0;i<n;i++){const v=g[i];sumG+=v;sumG2+=v*v;if(v<mnG)mnG=v;if(v>mxG)mxG=v;}
+    const mean=(sumG/n).toFixed(1),std=Math.sqrt(sumG2/n-(sumG/n)**2).toFixed(1);
+    const bin=new Uint8Array(n);let white=0;for(let i=0;i<n;i++){bin[i]=g[i]>127?255:0;if(bin[i])white++;}
+    const comps=analyzeComponents(bin,w,h);
+    const corners=harrisCorners(g,w,h);
+    const pct=(white/n*100).toFixed(1);
+    let compHtml='';
+    comps.slice(0,4).forEach((c,i)=>{compHtml+=`<div class="comp-mini"><div class="comp-mini-title">元件 #${i+1} — ${c.area}px (${(c.area/n*100).toFixed(1)}%)</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 6px;font-size:8px"><span style="color:var(--txd)">重心</span><span>(${c.cx},${c.cy})</span><span style="color:var(--txd)">周長</span><span>${c.perim}</span><span style="color:var(--txd)">圓形度</span><span>${c.circ.toFixed(3)}</span><span style="color:var(--txd)">邊界框</span><span>${c.bw}×${c.bh}</span></div></div>`;});
+    el.innerHTML=`
+      <div class="fs-title">基本資訊</div>
+      <div class="frow"><span>尺寸</span><span>${w}×${h}</span></div>
+      <div class="frow"><span>平均灰度</span><span>${mean}</span></div>
+      <div class="frow"><span>標準差</span><span>${std}</span></div>
+      <div class="frow"><span>灰度範圍</span><span>${mnG}–${mxG}</span></div>
+      <div class="fs-title">二值分析</div>
+      <div class="frow"><span>白色像素</span><span>${white.toLocaleString()} (${pct}%)</span></div>
+      <div class="frow"><span>連通元件</span><span>${comps.length}</span></div>
+      <div class="fs-title">Harris 角點</div>
+      <div class="frow"><span>角點數</span><span style="color:var(--ac3)">${corners.length}</span></div>
+      <button class="corner-btn" onclick="toggleCorners(${stepId},${imgIdx})">顯示/隱藏角點</button>
+      <div class="fs-title">元件特徵（前${Math.min(comps.length,4)}個）</div>
+      ${compHtml||'<div style="color:var(--txd);font-size:8px">無偵測到白色元件</div>'}`;
+    // store corners
+    if(!step._corners)step._corners=[];
+    step._corners[imgIdx]=corners;
+  },20);
+}
+
+function toggleCorners(stepId,imgIdx){
+  const step=steps.find(s=>s.id===stepId);
+  const corners=step?._corners?.[imgIdx];
+  const out=step?.outputs?.[imgIdx];
+  const cv=document.getElementById(`cv-${stepId}-${imgIdx}`);
+  const wrap=document.getElementById(`cvwrap-${stepId}-${imgIdx}`);
+  if(!cv||!out||!corners||!wrap)return;
+
+  // toggle off existing overlay
+  let ov=document.getElementById(`ov-${stepId}-${imgIdx}`);
+  if(ov){if(ov.style.display!=='none'){ov.style.display='none';return;};}
+  else{
+    ov=document.createElement('canvas');
+    ov.id=`ov-${stepId}-${imgIdx}`;
+    ov.style.cssText='position:absolute;top:0;left:0;pointer-events:none;';
+    wrap.appendChild(ov);
+  }
+
+  // cv-wrap already has position:relative via CSS
+  // use cv's rendered size — getBoundingClientRect is accurate after layout
+  const rect=cv.getBoundingClientRect();
+  const dw=Math.round(rect.width);
+  const dh=Math.round(rect.height);
+  if(!dw||!dh)return;
+  const sx=dw/out.w, sy=dh/out.h;
+
+  // overlay exactly covers the canvas
+  ov.width=dw; ov.height=dh;
+  ov.style.width=dw+'px'; ov.style.height=dh+'px';
+  ov.style.display='block';
+
+  // dot radius: ~1.5% of width, clamp 5–14px
+  const r=Math.max(5,Math.min(14,dw*0.015));
+
+  const ctx=ov.getContext('2d');
+  ctx.clearRect(0,0,dw,dh);
+
+  for(const{x,y} of corners.slice(0,200)){
+    const dx=x*sx, dy=y*sy;
+    // shadow
+    ctx.beginPath();ctx.arc(dx,dy,r+2.5,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fill();
+    // gold fill
+    ctx.beginPath();ctx.arc(dx,dy,r,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,215,0,0.95)';ctx.fill();
+    // orange stroke
+    ctx.strokeStyle='rgba(220,100,0,1)';ctx.lineWidth=1.8;ctx.stroke();
+    // white centre pin
+    ctx.beginPath();ctx.arc(dx,dy,2,0,Math.PI*2);
+    ctx.fillStyle='#fff';ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════
+//  CONTROLS HTML
+// ═══════════════════════════════════════════
+function sel(id,opts,val){return `<select id="${id}" onchange="syncP(this)">${opts.map(o=>`<option${o===val?' selected':''}>${o}</option>`).join('')}</select>`;}
+function rng(id,min,max,step,val,unit=''){const dc=step<1?1:0;return `<div class="crow"><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}" oninput="syncP(this);this.nextElementSibling.textContent=parseFloat(this.value).toFixed(${dc})+'${unit}'"><span class="rv">${parseFloat(val).toFixed(dc)}${unit}</span></div>`;}
+function ck(id,lbl,chk){return `<div class="ckrow"><input type="checkbox" id="${id}"${chk?' checked':''} onchange="syncP(this)"><label for="${id}" style="margin:0;font-size:10px;color:var(--tx);letter-spacing:0">${lbl}</label></div>`;}
+function morphCtrl(p,sid,hasIter){return `<div class="cg"><label class="cl">形狀</label>${sel('p-shape-'+sid,SHAPES,p.shape)}</div><div class="cg"><label class="cl">ksize</label>${rng('p-ksize-'+sid,1,31,2,p.ksize)}</div>${hasIter?`<div class="cg"><label class="cl">迭代</label>${rng('p-iter-'+sid,1,10,1,p.iter)}</div>`:''}`;}
+function buildCtrl(type,p,sid){
+  switch(type){
+    case 'color':    return `<div class="cg"><label class="cl">輸出空間</label>${sel('p-mode-'+sid,COLOR_MODES,p.mode)}</div>`;
+    case 'contrast': return `<div class="cg"><label class="cl">通道</label>${sel('p-base-'+sid,BASE_MODES,p.base)}</div><div class="cg"><label class="cl">方法</label>${sel('p-method-'+sid,['Histogram Equalization','CLAHE'],p.method==='HE'?'Histogram Equalization':'CLAHE')}</div><div class="cg"><label class="cl">clipLimit</label>${rng('p-clip-'+sid,1,10,.1,p.clip)}</div><div class="cg"><label class="cl">tileGrid</label>${rng('p-tile-'+sid,2,32,1,p.tile)}</div>`;
+    case 'edge':     return `<div class="cg"><label class="cl">通道</label>${sel('p-base-'+sid,BASE_MODES,p.base)}</div><div class="cg"><label class="cl">方法</label>${sel('p-method-'+sid,['Canny','Sobel','Laplacian'],p.method)}</div><div class="cg"><label class="cl">Blur ksize</label>${rng('p-blur-'+sid,1,21,2,p.blur)}</div><div class="cg"><label class="cl">threshold1</label>${rng('p-t1-'+sid,0,255,1,p.t1)}</div><div class="cg"><label class="cl">threshold2</label>${rng('p-t2-'+sid,0,255,1,p.t2)}</div>`;
+    case 'threshold':return `<div class="cg"><label class="cl">通道</label>${sel('p-base-'+sid,BASE_MODES,p.base)}</div><div class="cg"><label class="cl">閾值</label>${rng('p-thr-'+sid,0,255,1,p.thr)}</div><div class="cg">${ck('p-inv-'+sid,'反向 Invert',p.inv)}</div>`;
+    case 'otsu':     return `<div class="cg"><label class="cl">通道</label>${sel('p-base-'+sid,BASE_MODES,p.base)}</div><div class="cg"><label class="cl">Blur ksize</label>${rng('p-blur-'+sid,1,21,2,p.blur)}</div><div class="cg">${ck('p-inv-'+sid,'反向 Invert',p.inv)}</div>`;
+    case 'dilate':   return morphCtrl(p,sid,true);
+    case 'erode':    return morphCtrl(p,sid,true);
+    case 'open':     return morphCtrl(p,sid,false);
+    case 'close':    return morphCtrl(p,sid,false);
+    case 'fill':     return `<div class="cg"><label class="cl">填滿模式</label>${sel('p-mode-'+sid,['填補孔洞','只填滿最大輪廓'],p.mode)}</div>`;
+    case 'resize':   return `<div class="cg"><label class="cl">縮放</label>${rng('p-scale-'+sid,.1,4,.05,p.scale,'x')}</div><div class="cg"><label class="cl">旋轉</label>${rng('p-angle-'+sid,-180,180,1,p.angle,'°')}</div><div class="cg">${ck('p-expand-'+sid,'展開畫布',p.expand)}</div>`;
+  }
+}
+
+function syncP(el){
+  const parts=el.id.split('-'),stepId=parseInt(parts[parts.length-1]),key=parts.slice(1,-1).join('-');
+  const idx=steps.findIndex(s=>s.id===stepId);if(idx<0)return;
+  const step=steps[idx];
+  let val=el.type==='checkbox'?el.checked:el.type==='range'?parseFloat(el.value):el.value;
+  if(key==='method'&&step.type==='contrast')val=val.startsWith('Histogram')?'HE':'CLAHE';
+  step.params[key]=val;
+  scheduleRun(idx);
+}
+
+// ═══════════════════════════════════════════
+//  STEP MANAGEMENT
+// ═══════════════════════════════════════════
+function addStep(type){
+  pushHistory();
+  const id=++sid;
+  steps.push({id,type,params:JSON.parse(JSON.stringify(DEF[type])),outputs:[null,null,null]});
+  rebuildPipe();
+  setTimeout(()=>{
+    document.getElementById('pipeWrap').scrollTo({top:99999,behavior:'smooth'});
+    scheduleRun(steps.length-1);
+  },60);
+}
+function removeStep(id){
+  pushHistory();
+  const idx=steps.findIndex(s=>s.id===id);
+  steps=steps.filter(s=>s.id!==id);
+  rebuildPipe();
+  if(idx<steps.length)scheduleRun(idx);
+}
+function moveStep(id,dir){
+  pushHistory();
+  const i=steps.findIndex(s=>s.id===id),ni=i+dir;
+  if(ni<0||ni>=steps.length)return;
+  [steps[i],steps[ni]]=[steps[ni],steps[i]];
+  rebuildPipe();scheduleRun(Math.min(i,ni));
+}
+function clearAll(){pushHistory();steps=[];rebuildPipe();}
+function toggleCol(id){document.getElementById('node-'+id)?.classList.toggle('col');}
+function toggleFeat(id){
+  const btn=document.getElementById('ftbtn-'+id),body=document.getElementById('ftbody-'+id);
+  const open=btn.classList.contains('feat-open');
+  btn.classList.toggle('feat-open',!open);
+  body.style.display=open?'none':'grid';
+}
+
+// ═══════════════════════════════════════════
+//  REBUILD PIPELINE DOM
+// ═══════════════════════════════════════════
+function rebuildPipe(){
+  const pipe=document.getElementById('pipe');pipe.innerHTML='';
+  if(!steps.length){
+    pipe.innerHTML='<div class="empty-hint">← 從左側加入處理步驟<br>三張影像使用相同參數<br>調整參數後即時比較結果</div>';
+    return;
+  }
+  steps.forEach((step,idx)=>{
+    const meta=META[step.type];
+    // arrow row
+    const arow=document.createElement('div');arow.className='arrow-row';
+    arow.innerHTML=`<div class="arrow-ctrl"></div>${[0,1,2].map(i=>`<div class="arrow-col"><div class="arr"></div></div>`).join('')}`;
+    pipe.appendChild(arow);
+    // node
+    const node=document.createElement('div');
+    node.className='pnode';node.id='node-'+step.id;
+    const prevCells=[0,1,2].map(imgIdx=>`
+      <div class="nprev-cell" id="cell-${step.id}-${imgIdx}">
+        <span class="ncol-lbl" style="color:${IMG_COLORS[imgIdx]}">${IMG_LABELS[imgIdx]}</span>
+        <div class="npempty"${step.outputs[imgIdx]?' style="display:none"':''}>—</div>
+        <div class="cv-wrap" id="cvwrap-${step.id}-${imgIdx}">
+          <canvas id="cv-${step.id}-${imgIdx}"${step.outputs[imgIdx]?'':' style="display:none"'}></canvas>
+        </div>
+        <div class="ndim">${step.outputs[imgIdx]?step.outputs[imgIdx].w+'×'+step.outputs[imgIdx].h:''}</div>
+      </div>`).join('');
+
+    node.innerHTML=`
+      <div class="nh" onclick="toggleCol(${step.id})">
+        <div class="ndot" style="background:${meta.color};box-shadow:0 0 5px ${meta.color}77"></div>
+        <span class="nidx">${idx+1}.</span>
+        <span class="ntitle">${meta.label}</span>
+        <div class="nacts">
+          ${idx>0?`<button class="na mv" onclick="event.stopPropagation();moveStep(${step.id},-1)">↑</button>`:''}
+          ${idx<steps.length-1?`<button class="na mv" onclick="event.stopPropagation();moveStep(${step.id},1)">↓</button>`:''}
+          <button class="na" onclick="event.stopPropagation();removeStep(${step.id})">✕</button>
+        </div>
+        <span class="chev">▾</span>
+      </div>
+      <div class="node-body-row">
+        <div class="nbody">${buildCtrl(step.type,step.params,step.id)}</div>
+        ${prevCells}
+      </div>
+      <div class="nfeat-wrap">
+        <button class="feat-toggle" id="ftbtn-${step.id}" onclick="toggleFeat(${step.id})">
+          📊 形態特徵分析
+          <span class="ft-chev">▾</span>
+        </button>
+        <div class="feat-body" id="ftbody-${step.id}" style="display:none">
+          <div class="feat-ctrl-cell">
+            ${[0,1,2].map(i=>`<button class="feat-run-btn" style="margin-bottom:5px" onclick="runAnalysis(${step.id},${i})">▶ 分析 ${IMG_LABELS[i]}</button>`).join('')}
+          </div>
+          ${[0,1,2].map(i=>`
+            <div class="feat-res-cell" style="border-top:2px solid ${IMG_COLORS[i]}44">
+              <div style="font-size:8px;color:${IMG_COLORS[i]};letter-spacing:.1em;margin-bottom:5px">${IMG_LABELS[i]}</div>
+              <div class="feat-empty" id="fr-${step.id}-${i}"><span style="color:var(--txd)">點擊「▶ 分析」</span></div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    pipe.appendChild(node);
+    // render existing outputs
+    step.outputs.forEach((out,imgIdx)=>{
+      if(!out)return;
+      const cv=document.getElementById(`cv-${step.id}-${imgIdx}`);
+      renderOut(cv,out);
+      document.getElementById(`cell-${step.id}-${imgIdx}`)?.querySelector('.npempty')?.style.setProperty('display','none');
+      const dim=document.getElementById(`cell-${step.id}-${imgIdx}`)?.querySelector('.ndim');
+      if(dim)dim.textContent=out.w+'×'+out.h;
+      if(cv)bindPxInspector(cv,out);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════
+//  INPUT ROW (3 slots)
+// ═══════════════════════════════════════════
+function buildInputRow(){
+  const row=document.getElementById('inputRow');
+  // clear slots (keep label cell)
+  row.innerHTML=`<div class="input-label-cell"><span class="input-tag">INPUT</span></div>`;
+  for(let i=0;i<NUM_IMGS;i++){
+    const slot=document.createElement('div');
+    slot.className='img-slot';slot.id='slot-'+i;
+    slot.innerHTML=`
+      <div class="slot-head">
+        <span class="slot-num" style="color:${IMG_COLORS[i]}">${IMG_LABELS[i]}</span>
+        <span class="slot-dim" id="sdim-${i}">${srcs[i]?srcs[i].w+'×'+srcs[i].h:'—'}</span>
+      </div>
+      <div class="slot-up" id="sup-${i}">
+        <input type="file" accept="image/*" onchange="loadFile(${i},this.files[0])">
+        ${srcs[i]?`<button class="slot-del" onclick="clearSlot(${i});event.stopPropagation()">✕</button>`:''}
+        ${srcs[i]?'':'<div class="slot-empty"><span class="ue">⬡</span>上傳影像<br><span style="font-size:8px">點擊或拖曳</span></div>'}
+        <canvas id="scv-${i}"${srcs[i]?'':' style="display:none"'}></canvas>
+      </div>`;
+    row.appendChild(slot);
+    if(srcs[i]){
+      setTimeout(()=>{
+        const cv=document.getElementById('scv-'+i);
+        if(cv){
+          cv.width=srcs[i].w;cv.height=srcs[i].h;
+          cv.getContext('2d').putImageData(srcs[i].data,0,0);
+          cv.style.display='block';
+          bindPxInspectorSrc(cv,i);
+        }
+      },0);
+    }
+    // drag & drop
+    const sup=slot.querySelector('.slot-up');
+    sup.addEventListener('dragover',e=>{e.preventDefault();sup.style.borderColor='var(--ac)';});
+    sup.addEventListener('dragleave',()=>sup.style.borderColor='');
+    sup.addEventListener('drop',e=>{e.preventDefault();sup.style.borderColor='';loadFile(i,e.dataTransfer.files[0]);});
+  }
+}
+
+function loadFile(imgIdx,file){
+  if(!file||!file.type.startsWith('image/'))return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const w=img.width,h=img.height;
+      const cv=document.createElement('canvas');
+      cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0);
+      const data=cv.getContext('2d').getImageData(0,0,w,h);
+      srcs[imgIdx]={data,w,h};
+      buildInputRow();
+      scheduleRun(0);
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearSlot(imgIdx){
+  srcs[imgIdx]=null;
+  steps.forEach(s=>{if(s.outputs)s.outputs[imgIdx]=null;});
+  buildInputRow();
+  rebuildPipe();
+}
+
+// ═══════════════════════════════════════════
+//  PIXEL INSPECTOR
+// ═══════════════════════════════════════════
+const tip=document.getElementById('pxTip');
+function showTip(e,r,g,b,x,y){
+  document.getElementById('pxR').textContent=r;document.getElementById('pxG').textContent=g;
+  document.getElementById('pxB').textContent=b;document.getElementById('pxPos').textContent=x+', '+y;
+  document.getElementById('pxSw').style.background=`rgb(${r},${g},${b})`;
+  tip.style.display='block';
+  const ox=Math.min(e.clientX+14,window.innerWidth-145),oy=Math.min(e.clientY+14,window.innerHeight-125);
+  tip.style.left=ox+'px';tip.style.top=oy+'px';
+}
+function hideTip(){tip.style.display='none';}
+function bindPxInspector(cv,out){
+  if(!cv||!out)return;
+  cv.onmousemove=e=>{
+    const rect=cv.getBoundingClientRect(),{w,h}=out;
+    const px=Math.max(0,Math.min(w-1,Math.floor((e.clientX-rect.left)/rect.width*w)));
+    const py=Math.max(0,Math.min(h-1,Math.floor((e.clientY-rect.top)/rect.height*h)));
+    const i=py*w+px;let r,g,b;
+    if(out.type==='gray'){r=g=b=out.data[i]|0;}else{r=out.data[i*3]|0;g=out.data[i*3+1]|0;b=out.data[i*3+2]|0;}
+    showTip(e,r,g,b,px,py);
+  };cv.onmouseleave=hideTip;
+}
+function bindPxInspectorSrc(cv,imgIdx){
+  if(!cv||!srcs[imgIdx])return;
+  cv.onmousemove=e=>{
+    const src=srcs[imgIdx],rect=cv.getBoundingClientRect();
+    const px=Math.max(0,Math.min(src.w-1,Math.floor((e.clientX-rect.left)/rect.width*src.w)));
+    const py=Math.max(0,Math.min(src.h-1,Math.floor((e.clientY-rect.top)/rect.height*src.h)));
+    const i=(py*src.w+px)*4,d=src.data.data;showTip(e,d[i],d[i+1],d[i+2],px,py);
+  };cv.onmouseleave=hideTip;
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+updateUndoBtn();
+buildInputRow();
+rebuildPipe();
+</script>
+</body>
+</html>
